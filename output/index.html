@@ -3,7 +3,7 @@
 <title>凹语言生命游戏</title>
 
 <div style="text-align: center;">
-  <canvas id="canvas" width="600" height="600"></canvas>
+  <canvas id="canvas" width="400" height="400"></canvas>
   <div>R键:重置; 空格键:暂停</div>
 </div>
 
@@ -20,7 +20,7 @@
       let preTimeStamp = 1;
 
       // 初始化
-      app.LifeInit(600, 600, preTimeStamp);
+      app.LifeInit(400, 400, preTimeStamp);
 
       document.addEventListener('keyup', (event) => {
         switch (event.key) {
@@ -29,7 +29,7 @@
             app.LifePausing()
             break;
           case 'r':
-            app.LifeInit(600, 600, preTimeStamp);
+            app.LifeInit(400, 400, preTimeStamp);
             break;
         }
       });
