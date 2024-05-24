@@ -13,6 +13,11 @@ class WaApp {
       mem: () => { return this._wasm_inst.exports.memory; },
       mem_view: (addr, len) => { return new DataView(this._mem_util.mem().buffer, addr, len); },
       mem_array_u8: (addr, len) => { return new Uint8Array(this._mem_util.mem().buffer, addr, len); },
+      mem_array_u16: (addr, len) => { return new Uint16Array(this._mem_util.mem().buffer, addr, len); },
+      mem_array_u32: (addr, len) => { return new Uint32Array(this._mem_util.mem().buffer, addr, len); },
+      mem_array_i32: (addr, len) => { return new Int32Array(this._mem_util.mem().buffer, addr, len); },
+      mem_array_f32: (addr, len) => { return new Float32Array(this._mem_util.mem().buffer, addr, len); },
+      mem_array_f64: (addr, len) => { return new Float64Array(this._mem_util.mem().buffer, addr, len); },
       get_string: (d, l) => { return new TextDecoder("utf-8").decode(this._mem_util.mem_view(d, l)); },
       set_string: (s) => {
         const bytes = new TextEncoder("utf-8").encode(s);
@@ -33,26 +38,28 @@ class WaApp {
       },
       block_release: (addr) => { this._wasm_inst.exports["runtime.Block.Release"](addr); },
       //基本类型直接读写：
-      bool_load: (addr) => { /*Todo*/ },
-      bool_store: (addr, v) => { /*Todo*/ },
-      u8_load: (addr) => { /*Todo*/ },
-      u8_store: (addr, v) => { /*Todo*/ },
-      u16_load: (addr) => { /*Todo*/ },
-      u16_store: (addr, v) => { /*Todo*/ },
-      u32_load: (addr) => { /*Todo*/ },
-      u32_store: (addr, v) => { /*Todo*/ },
-      i32_load: (addr) => { return this._wasm_inst.exports["runtime.i32_load"](addr); },
-      i32_store: (addr, v) => { this._wasm_inst.exports["runtime.i32_store"](addr, v); },
-      rune_load: (addr) => { /*Todo*/ },
-      rune_store: (addr, v) => { /*Todo*/ },
-      u64_load: (addr) => { /*Todo*/ },
-      u64_store: (addr, v) => { /*Todo*/ },
-      i64_load: (addr) => { /*Todo*/ },
-      i64_store: (addr, v) => { /*Todo*/ },
-      f32_load: (addr) => { return this._wasm_inst.exports["runtime.f32_load"](addr); },
-      f32_store: (addr, v) => { this._wasm_inst.exports["runtime.f32_store"](addr, v); },
-      f64_load: (addr) => { return this._wasm_inst.exports["runtime.f64_load"](addr); },
-      f64_store: (addr, v) => { this._wasm_inst.exports["runtime.f64_store"](addr, v); },
+      bool_load: (addr) => { return this._mem_util.mem_array_u8(addr, 1)[0] != 0; },
+      bool_store: (addr, v) => {
+        if (v) {
+          this._mem_util.mem_array_u8(addr, 1)[0] = 1;
+        } else {
+          this._mem_util.mem_array_u8(addr, 1)[0] = 0;
+        }
+      },
+      u8_load: (addr) => { return this._mem_util.mem_array_u8(addr, 1)[0]; },
+      u8_store: (addr, v) => { this._mem_util.mem_array_u8(addr, 1)[0] = v; },
+      u16_load: (addr) => { return this._mem_util.mem_array_u16(addr, 1)[0]; },
+      u16_store: (addr, v) => { this._mem_util.mem_array_u16(addr, 1)[0] = v; },
+      u32_load: (addr) => { return this._mem_util.mem_array_u32(addr, 1)[0]; },
+      u32_store: (addr, v) => { this._mem_util.mem_array_u32(addr, 1)[0] = v; },
+      i32_load: (addr) => { return this._mem_util.mem_array_i32(addr, 1)[0]; },
+      i32_store: (addr, v) => { this._mem_util.mem_array_i32(addr, 1)[0] = v; },
+      rune_load: (addr) => { return String.fromCodePoint(this._mem_util.mem_array_u32(addr, 1)[0]); },
+      rune_store: (addr, v) => { this._mem_util.mem_array_u32(addr, 1)[0] = v.codePointAt(0); },
+      f32_load: (addr) => { return this._mem_util.mem_array_f32(addr, 1)[0]; },
+      f32_store: (addr, v) => { this._mem_util.mem_array_f32(addr, 1)[0] = v; },
+      f64_load: (addr) => { return this._mem_util.mem_array_f64(addr, 1)[0]; },
+      f64_store: (addr, v) => { this._mem_util.mem_array_f64(addr, 1)[0] = v; },
       string_load: (addr) => {
         const d = this._mem_util.i32_load(addr + 4);
         const l = this._mem_util.i32_load(addr + 8);
@@ -61,7 +68,7 @@ class WaApp {
       string_store: (addr, v) => {
         const b = this._mem_util.i32_load(addr);
         this._mem_util.block_release(b);
-        let ns = set_string(v);
+        let ns = this._mem_util.set_string(v);
         this._mem_util.i32_store(addr, ns[0]);
         this._mem_util.i32_store(addr + 4, ns[1]);
         this._mem_util.i32_store(addr + 8, ns[2]);
@@ -87,7 +94,12 @@ class WaApp {
   _createSyscall = () => {
     return {
       print_bool: (b) => { this._wa_print_buf += Boolean(b).toString(); },
-      print_u32: (i) => { this._wa_print_buf += i; },
+      print_u32: (i) => {
+        if (i < 0) {
+          i += 4294967296;
+        }
+        this._wa_print_buf += i;
+      },
       print_i32: (i) => { this._wa_print_buf += i },
       print_u64: (i) => { this._wa_print_buf += i },
       print_u64: (i) => { this._wa_print_buf += i },
@@ -116,12 +128,111 @@ class WaApp {
       syscall_js: this._createSyscall(),
       
 // ---------------------------------------------------------
-// package: canvas
+// package: js
+// ---------------------------------------------------------
+
+// file: extobj.import.js
+
+extobj: new function() {
+  this._obj_buf = [{}];
+  this._free_ids = [];
+  this.new_obj = () => {
+    let obj = {}
+    let h = this._free_ids.length > 0
+      ? this._free_ids.pop()
+      : this._obj_buf.length
+    this._obj_buf[h] = obj;
+    return h
+  }
+  this.free_obj = (h) => {
+    let obj = this._obj_buf[h];
+    // obj.free(); // TODO: 释放资源
+    this._obj_buf[h] = null;
+    this._free_ids.push(h);
+  }
+  this.insert_obj = (obj) => {
+    let h = this.new_obj()
+    this._obj_buf[h] = obj
+    return h
+  }
+  this.get_obj = (h) => {
+    return this._obj_buf[h];
+  }
+  this.set_obj = (h, obj) => {
+    this._obj_buf[h] = obj;
+  }
+  this.query_selector = (sel_b, sel_d, sel_l) => {
+    const selector = app._mem_util.get_string(sel_d, sel_l);
+    const obj = document.querySelector(selector);
+    if (obj) {
+      return this.insert_obj(obj);
+    } else {
+      return 0;
+    }
+  }
+  this.set_member_bool = (h, member_name_b, member_name_d, member_name_l, value) => {
+    let member_name = app._mem_util.get_string(member_name_d, member_name_l);
+    if (value === 0){
+      this._obj_buf[h][member_name] = false;
+    } else {
+      this._obj_buf[h][member_name] = true;
+    }
+  }
+  this.set_member_i32 = (h, member_name_b, member_name_d, member_name_l, value) => {
+    let member_name = app._mem_util.get_string(member_name_d, member_name_l);
+    this._obj_buf[h][member_name] = value;
+  }
+  this.set_member_f32 = (h, member_name_b, member_name_d, member_name_l, value) => {
+    let member_name = app._mem_util.get_string(member_name_d, member_name_l);
+    this._obj_buf[h][member_name] = value;
+  }
+  this.set_member_string = (h, name_b, name_d, name_l, value_b, value_d, value_l) => {
+    let name = app._mem_util.get_string(name_d, name_l);
+    let value = app._mem_util.get_string(value_d, value_l);
+    this._obj_buf[h][name] = value;
+  }
+  this.set_member_obj = (h, member_name_b, member_name_d, member_name_l, value) => {
+    if (value > 0) {
+      let member_name = app._mem_util.get_string(member_name_d, member_name_l);
+      this._obj_buf[h][member_name] = this._obj_buf[value];
+    }    
+  }
+  this.new_array = () => {
+    let arr = [];
+    let h = this._free_ids.length > 0
+      ? this._free_ids.pop()
+      : this._obj_buf.length
+    this._obj_buf[h] = arr
+    return h
+  }
+  this.append_i32 = (h, value) => {
+    this._obj_buf[h].push(value);
+  }
+  this.append_string = (h, value_b, value_d, value_l) => {
+    let value = app._mem_util.get_string(value_d, value_l);
+    this._obj_buf[h].push(value);
+  }
+  this.append_obj = (h, value) => {
+    if (value > 0) {
+      this._obj_buf[h].push(this._obj_buf[value]);
+    }
+  }
+  app._extobj = this;
+},
+// ---------------------------------------------------------
+// package: js/canvas
 // ---------------------------------------------------------
 
 // file: canvas.import.js
 
 canvas: new function() {
+  this.set_width_height = (canvas_handle, width, height) => {
+    if (canvas_handle == 0) return;
+    const canvas = app._extobj.get_obj(canvas_handle);
+    canvas.width = width;
+    canvas.height = height;
+  }
+
   this.get_context2d = (h) => {
     if (h == 0) return 0;
 
@@ -286,6 +397,12 @@ canvas: new function() {
 
     const ctx = app._extobj.get_obj(ctx_handle);
     ctx.arcTo(x1, y1, x2, y2, r);
+  }
+  this.ellipse = (ctx_handle, x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise) => {
+    if (ctx_handle == 0) return;
+
+    const ctx = app._extobj.get_obj(ctx_handle);
+    ctx.ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise);
   }
   this.is_point_in_path = (ctx_handle, x, y) => {
     if (ctx_handle == 0) return;
@@ -460,86 +577,6 @@ canvas: new function() {
 
   app._canvas = this;
 },
-// ---------------------------------------------------------
-// package: js
-// ---------------------------------------------------------
-
-// file: extobj.import.js
-
-extobj: new function() {
-  this._obj_buf = [{}];
-  this._free_ids = [];
-  this.new_obj = () => {
-    let obj = {}
-    let h = this._free_ids.length > 0
-      ? this._free_ids.pop()
-      : this._obj_buf.length
-    this._obj_buf[h] = obj;
-    return h
-  }
-  this.free_obj = (h) => {
-    let obj = this._obj_buf[h];
-    // obj.free(); // TODO: 释放资源
-    this._obj_buf[h] = null;
-    this._free_ids.push(h);
-  }
-  this.insert_obj = (obj) => {
-    let h = this.new_obj()
-    this._obj_buf[h] = obj
-    return h
-  }
-  this.get_obj = (h) => {
-    return this._obj_buf[h];
-  }
-  this.set_obj = (h, obj) => {
-    this._obj_buf[h] = obj;
-  }
-  this.query_selector = (sel_b, sel_d, sel_l) => {
-    const selector = app._mem_util.get_string(sel_d, sel_l);
-    const obj = document.querySelector(selector);
-    if (obj) {
-      return this.insert_obj(obj);
-    } else {
-      return 0;
-    }
-  }
-  this.set_member_f32 = (h, member_name_b, member_name_d, member_name_l, value) => {
-    let member_name = app._mem_util.get_string(member_name_d, member_name_l);
-    this._obj_buf[h][member_name] = value;
-  }
-  this.set_member_i32 = (h, member_name_b, member_name_d, member_name_l, value) => {
-    let member_name = app._mem_util.get_string(member_name_d, member_name_l);
-    this._obj_buf[h][member_name] = value;
-  }
-  this.set_member_string = (h, name_b, name_d, name_l, value_b, value_d, value_l) => {
-    let name = app._mem_util.get_string(name_d, name_l);
-    let value = app._mem_util.get_string(value_d, value_l);
-    this._obj_buf[h][name] = value;
-  }
-  this.set_member_obj = (h, member_name_b, member_name_d, member_name_l, value) => {
-    let member_name = app._mem_util.get_string(member_name_d, member_name_l);
-    this._obj_buf[h][member_name] = this._obj_buf[value];
-  }
-  this.new_array = () => {
-    let arr = [];
-    let h = this._free_ids.length > 0
-      ? this._free_ids.pop()
-      : this._obj_buf.length
-    this._obj_buf[h] = arr
-    return h
-  }
-  this.append_i32 = (h, value) => {
-    this._obj_buf[h].push(value);
-  }
-  this.append_string = (h, value_b, value_d, value_l) => {
-    let value = app._mem_util.get_string(value_d, value_l);
-    this._obj_buf[h].push(value);
-  }
-  this.append_obj = (h, value) => {
-    this._obj_buf[h].push(this._obj_buf[value]);
-  }
-  app._extobj = this;
-},
 
       // ...
     };
@@ -561,7 +598,9 @@ extobj: new function() {
 params.push(h);
 params.push(s);
 
+        
         let res = this._wasm_inst.exports["myapp.LifeInit"](...params);
+        
         
         
         
@@ -571,7 +610,9 @@ params.push(s);
         // 准备参数
         let params = [];
         
+        
         let res = this._wasm_inst.exports["myapp.LifePausing"](...params);
+        
         
         
         
@@ -581,7 +622,9 @@ params.push(s);
         // 准备参数
         let params = [];
         
+        
         let res = this._wasm_inst.exports["myapp.LifeStep"](...params);
+        
         
         
         
@@ -591,7 +634,9 @@ params.push(s);
         // 准备参数
         let params = [];
         
+        
         let res = this._wasm_inst.exports["myapp.main"](...params);
+        
         
         
         
